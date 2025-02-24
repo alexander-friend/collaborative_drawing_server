@@ -2,12 +2,13 @@ import http from 'http';
 import express from 'express';
 import { DefaultEventsMap, Server, Socket } from 'socket.io';
 import admin from 'firebase-admin';
-import { json } from 'stream/consumers';
 
+// Check if the FIREBASE_SERVICE_ACCOUNT environment variable is set.
 if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
     throw new Error('FIREBASE_SERVICE_ACCOUNT environment variable is not set');
 }
 
+// Parse the service account JSON from base64 to object.
 const serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT, 'base64').toString());
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
@@ -30,6 +31,10 @@ interface CustomSocket extends Socket<DefaultEventsMap, DefaultEventsMap, Defaul
 const canvasVersions: { [room: string]: number } = {};
 const canvasLastLineId: { [room: string]: string } = {};
 
+/**
+ * Cleans up the room if there are no more clients in the room.
+ * @param room The room to clean up.
+ */
 function cleanupRoom(room: string) {
     // Get the room set from the adapter.
     const roomSockets = io.sockets.adapter.rooms.get(room);
@@ -40,7 +45,9 @@ function cleanupRoom(room: string) {
     }
 }
 
-
+/**
+ * Middleware to authenticate the socket connection using Firebase Auth.
+ */
 io.use(async (socket: CustomSocket, next) => {
     console.log('Authenticating socket connection');
     const token = socket.handshake.auth.token;
@@ -61,8 +68,14 @@ io.use(async (socket: CustomSocket, next) => {
 io.on("connection", (socket: CustomSocket) => {
     console.log('New WebSocket connection established', socket.id, 'by User: ', socket.user?.uid);
 
+    /**
+     * Broadcasts the message to all clients in the room.
+     * @param message The message to broadcast.
+     * @param room The room to broadcast the message to.
+     */
     socket.on('message', (message) => {
         let jsonMessage;
+        // Parse the message if it is a string or a buffer into JSON.
         if (typeof message === 'string') {
             jsonMessage = JSON.parse(message);
         } else if (message instanceof Buffer) {
@@ -75,34 +88,36 @@ io.on("connection", (socket: CustomSocket) => {
 
         socket.rooms.forEach(room => {
             if (room === socket.id) return;
-
             if (canvasVersions[room] === undefined) {
                 canvasVersions[room] = 0;
             }
-            console.log(jsonMessage.a === 'cu');
+            // Check if the message is a canvas update message.
             if (jsonMessage.a === 'cu') {
-                console.log('cu test')
                 try {
                     const dataObj = JSON.parse(jsonMessage.data);
                     const newLineId = dataObj.id;
+                    // Increment the version number if the line ID is different.
                     if (!canvasLastLineId[room] || canvasLastLineId[room] !== newLineId) {
                         canvasVersions[room]++;
                         canvasLastLineId[room] = newLineId;
                         console.log(`Room ${room}: Incremented version to ${canvasVersions[room]} for new line ID ${newLineId}`);
                     }
+                    // Add the version number to the message.
                     jsonMessage.v = canvasVersions[room];
                 } catch (e) {
                     console.error('Error parsing JSON:', e);
                 }
             }
-
-            console.log('Broadcasting message to room:', room);
             const jsonStringMessage = JSON.stringify(jsonMessage)
-            //console.log('Message:', jsonStringMessage);
             socket.to(room).emit('message', jsonStringMessage);
         });
     });
 
+    /**
+     * Creates a new room and joins the socket to the room.
+     * @param room The room to create.
+     * @param callback The callback function to acknowledge the success or failure to client.
+     */
     socket.on('create_room', function (room, callback) {
         console.log('Room Name', room);
         const existingRoom = io.sockets.adapter.rooms.get(room);
@@ -114,6 +129,11 @@ io.on("connection", (socket: CustomSocket) => {
         callback("got it");
     });
 
+    /**
+     * Joins the socket to the room.
+     * @param room The room to join.
+     * @param callback The callback function to acknowledge the success or failure to client.
+     */
     socket.on('join_room', (room, callback) => {
         const existingRoom = io.sockets.adapter.rooms.get(room);
         if (!existingRoom) {
@@ -126,6 +146,11 @@ io.on("connection", (socket: CustomSocket) => {
         typeof callback === 'function' && callback('joined');
     });
 
+    /**
+     * Disconnects the socket from the room.
+     * @param room The room to leave.
+     * @param callback The callback function to acknowledge the request back to the client.
+     */
     socket.on('leave_room', (room, callback) => {
         // Check if the room exists
         const existingRoom = io.sockets.adapter.rooms.get(room);

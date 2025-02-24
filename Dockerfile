@@ -3,6 +3,7 @@ ENV NODE_ENV production
 ENV PORT 8080
 WORKDIR /app
 COPY package*.json .
-RUN npm install --omity=dev
+RUN npm install
 COPY . .
-CMD [ "npm", "start" ]
+RUN npm run build
+CMD [ "npm", "run", "serve" ]
