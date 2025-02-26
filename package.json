@@ -27,8 +27,10 @@
   "description": "",
   "dependencies": {
     "@teamwork/websocket-json-stream": "^2.0.0",
+    "cors": "^2.8.5",
     "express": "^4.21.2",
     "firebase-admin": "^13.1.0",
+    "mongoose": "^8.10.1",
     "reconnecting-websocket": "^4.4.0",
     "socket.io": "^4.8.1",
     "ws": "^8.18.0"
